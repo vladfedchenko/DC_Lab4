@@ -19,7 +19,7 @@ type ClientData struct {
 func NewClientData() *ClientData {
 	p := new(ClientData)
 	p.filepath = ""
-	p.count = make(chan int)
+	p.count = make(chan int, 10)
 	return p
 }
 
@@ -49,7 +49,6 @@ var workerWait int = 20
 func worker(cnl chan *ClientData, stopChan chan bool){
 	for {
 		data := <-cnl
-		
 		activeWorkersMutex.Lock()
 		activeWorkers += 1
 		activeWorkersMutex.Unlock()
@@ -75,7 +74,6 @@ func worker(cnl chan *ClientData, stopChan chan bool){
 
 func client(cnl chan *ClientData, stopChan chan bool){
 	for {
-		
 		data := NewClientData()
 		data.filepath = os.Getenv("GOPATH")
 		data.filepath += "/src/github/dist_go_lab/20_newsgroup"
@@ -93,7 +91,7 @@ func client(cnl chan *ClientData, stopChan chan bool){
 	
 		cnl <- data
 	
-		wait := time.After(time.Millisecond * 100)
+		wait := time.After(time.Millisecond * 10)
 		select{
 			case <-wait:
 				failMutex.Lock()
@@ -120,9 +118,9 @@ func client(cnl chan *ClientData, stopChan chan bool){
 }
 
 func control(qiut chan bool, keyEvent chan rune){
-	dataChanel := make(chan *ClientData)
-	stopClientChan := make(chan bool)
-	stopWorkerChan := make(chan bool)
+	dataChanel := make(chan *ClientData, 100)
+	stopClientChan := make(chan bool, 100)
+	stopWorkerChan := make(chan bool, 100)
 	
 	for i := 0; i < workerCount; i++ {
 		go worker(dataChanel, stopWorkerChan)
@@ -213,7 +211,15 @@ func control(qiut chan bool, keyEvent chan rune){
 						clientIntensity = newIntent
 						TermPrintnl("Intensity changed: " + strconv.Itoa(clientIntensity))
 					case rune(17): //Ctrl + Q (to exit)
+						TermPrintnl("Done. Press Enter to exit.")
+						for i := 0; i < workerCount; i++{
+							stopWorkerChan <- false
+						}
+						for i := 0; i < clientCount; i++{
+							stopClientChan <- false
+						}
 						qiut <- false
+						return
 				}
 		}
 	}
@@ -243,9 +249,11 @@ func main() {
 	
 	go control(exitFlag, keyEvent)
 	
-	for{
+	var exitBool bool = true
+	for ;exitBool; {
 		select{
 			case <-exitFlag:
+				exitBool = false
 				break
 			default:
 				term.ReadLine()
