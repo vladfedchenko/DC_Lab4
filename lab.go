@@ -13,12 +13,14 @@ import (
 
 type ClientData struct {
     filepath string
+    execute bool
     count chan int
 }
 
 func NewClientData() *ClientData {
 	p := new(ClientData)
 	p.filepath = ""
+	p.execute = true
 	p.count = make(chan int, 10)
 	return p
 }
@@ -49,6 +51,9 @@ var workerWait int = 20
 func worker(cnl chan *ClientData, stopChan chan bool){
 	for {
 		data := <-cnl
+		if !data.execute{
+			continue
+		}
 		activeWorkersMutex.Lock()
 		activeWorkers += 1
 		activeWorkersMutex.Unlock()
@@ -94,6 +99,7 @@ func client(cnl chan *ClientData, stopChan chan bool){
 		wait := time.After(time.Millisecond * 10)
 		select{
 			case <-wait:
+				data.execute = false
 				failMutex.Lock()
 				failed += 1
 				failed5s += 1
